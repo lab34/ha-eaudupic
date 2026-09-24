@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Eau du Pic",
+        "description": "Enter your Eau du Pic portal credentials (https://eaudupic.client.ccgpsl.fr). They are used to renew the long-lived \"autologin\" token (~1 year) used afterwards.",
+        "data": {
+          "login": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Eau du Pic re-authentication",
+        "description": "The session for account {login} expired or the password changed. Enter the current Eau du Pic portal password.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Credentials rejected by the portal.",
+      "cannot_connect": "Cannot reach the portal. Try again later.",
+      "unknown": "Unexpected error. Check the logs."
+    },
+    "abort": {
+      "already_configured": "This Eau du Pic account is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "eau_index": {
+        "name": "Meter index"
+      },
+      "eau_conso_hier": {
+        "name": "Yesterday consumption"
+      }
+    }
+  }
+}

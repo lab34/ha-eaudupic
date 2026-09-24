@@ -1,0 +1,12 @@
+{
+  "domain": "eau_du_pic",
+  "name": "Eau du Pic",
+  "codeowners": ["@lab34"],
+  "config_flow": true,
+  "documentation": "https://github.com/lab34/ha-eaudupic",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/lab34/ha-eaudupic/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

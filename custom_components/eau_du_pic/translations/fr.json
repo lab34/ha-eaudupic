@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Eau du Pic",
+        "description": "Saisissez vos identifiants du portail Eau du Pic (https://eaudupic.client.ccgpsl.fr). Ils servent à renouveler automatiquement le jeton « autologin » (~1 an) utilisé par la suite.",
+        "data": {
+          "login": "Identifiant",
+          "password": "Mot de passe"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authentification Eau du Pic",
+        "description": "La session du compte {login} a expiré ou le mot de passe a changé. Saisissez le mot de passe actuel du portail Eau du Pic.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Identifiants refusés par le portail.",
+      "cannot_connect": "Impossible de contacter le portail. Réessayez plus tard.",
+      "unknown": "Erreur inattendue. Consultez les journaux."
+    },
+    "abort": {
+      "already_configured": "Ce compte Eau du Pic est déjà configuré.",
+      "reauth_successful": "Re-authentification réussie."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "eau_index": {
+        "name": "Index du compteur"
+      },
+      "eau_conso_hier": {
+        "name": "Consommation hier"
+      }
+    }
+  }
+}

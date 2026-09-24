@@ -1,0 +1,46 @@
+# Ruff configuration inspirée du template officiel ludeeus/integration_blueprint,
+# restreinte à un ensemble de règles utile pour un custom component.
+target-version = "py313"
+line-length = 100
+
+[lint]
+select = [
+    "A",   # flake8-builtins
+    "ANN", # flake8-annotations
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "D",   # pydocstyle
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "PT",  # flake8-pytest-style
+    "RUF", # ruff specific
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    "T20", # flake8-print
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+]
+ignore = [
+    "ANN401", # Any autorisé pour les mocks et les payloads JSON
+    "COM812", # conflit avec le formateur
+    "D203",   # incompatible avec D211
+    "D213",   # incompatible avec D212
+    "D401",   # docstrings en français : heuristique d'impératif anglais non applicable
+    "ISC001", # conflit avec le formateur
+]
+
+[lint.per-file-ignores]
+"tests/*" = [
+    "ANN",    # annotations non requises dans les tests
+    "D103",   # docstrings non requises dans les tests
+    "S101",   # assert autorisé
+    "S105",   # mots de passe factices
+    "S311",   # random non cryptographique (fixtures)
+    "SLF001", # accès aux attributs privés toléré
+    "PLR2004",
+]
+
+[lint.pydocstyle]
+convention = "pep257"
