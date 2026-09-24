@@ -11,8 +11,12 @@ permissions:
 jobs:
   hassfest:
     name: Hassfest
-    # Workflow réutilisable officiel de Home Assistant.
-    uses: home-assistant/actions/hassfest/.github/workflows/hassfest.yml@master
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@master
 
   hacs:
     name: HACS
