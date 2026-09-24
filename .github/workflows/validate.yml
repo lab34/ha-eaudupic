@@ -5,15 +5,22 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   hassfest:
     name: Hassfest
-    uses: home-assistant/actions/hassfest@master
+    # Workflow réutilisable officiel de Home Assistant.
+    uses: home-assistant/actions/hassfest/.github/workflows/hassfest.yml@master
 
   hacs:
     name: HACS
-    uses: hacs/action@main
-    with:
-      category: integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
