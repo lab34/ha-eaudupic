@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Eau du Pic",
-        "description": "Enter your Eau du Pic portal credentials (https://eaudupic.client.ccgpsl.fr). They are used to renew the long-lived \"autologin\" token (~1 year) used afterwards.",
+        "description": "Enter your Eau du Pic portal credentials ({portal_url}). They are used to renew the long-lived \"autologin\" token (~1 year) used afterwards.",
         "data": {
           "login": "Username",
           "password": "Password"

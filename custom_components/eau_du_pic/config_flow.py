@@ -21,7 +21,13 @@ from .api import (
     EauDuPicApiClientAuthenticationError,
     EauDuPicApiClientCommunicationError,
 )
-from .const import CONF_AUTOLOGIN, CONF_LOGIN, CONF_PASSWORD, DOMAIN
+from .const import (
+    API_BASE_URL,
+    CONF_AUTOLOGIN,
+    CONF_LOGIN,
+    CONF_PASSWORD,
+    DOMAIN,
+)
 
 _PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
@@ -84,6 +90,7 @@ class EauDuPicConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
+            description_placeholders={"portal_url": API_BASE_URL},
         )
 
     async def async_step_reauth(
