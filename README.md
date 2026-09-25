@@ -3,9 +3,9 @@
 [![Validate](https://github.com/lab34/ha-eaudupic/actions/workflows/validate.yml/badge.svg)](https://github.com/lab34/ha-eaudupic/actions/workflows/validate.yml)
 [![CI](https://github.com/lab34/ha-eaudupic/actions/workflows/ci.yml/badge.svg)](https://github.com/lab34/ha-eaudupic/actions/workflows/ci.yml)
 
-Intégration Home Assistant (custom component HACS) qui récupère la **télérelève du
+Intégration Home Assistant (custom component HACS) **NON OFFICIELLE** qui récupère la **télérelève du
 compteur d'eau** du portail abonnés [Eau du Pic](https://eaudupic.client.ccgpsl.fr)
-(CCG du Grand Pic Saint-Loup, plateforme iClients de JVS-Mairistem, partenaire Suez).
+(CC du Grand Pic Saint-Loup, plateforme iClients de JVS-Mairistem, partenaire Suez).
 
 Elle expose pour **chaque contrat d'eau** du compte :
 
