@@ -17,7 +17,9 @@ from .const import (
     LITERS_PER_CUBIC_METER,
     UPDATE_HOUR,
     UPDATE_JITTER_MAX_MINUTES,
+    UPDATE_LAG_DAYS,
     UPDATE_MINUTE,
+    UPDATE_RETRY_CUTOFF_HOUR,
     UPDATE_RETRY_DELAY,
     WINDOW_DAYS,
 )
@@ -37,28 +39,40 @@ def window_dates(now: datetime) -> tuple[date, date]:
     return today - timedelta(days=WINDOW_DAYS), today
 
 
+def _morning_target(now: datetime, rng: random.Random) -> datetime:
+    """Prochain créneau nominal de collecte : 06h30 (+ jitter 0-15 min)."""
+    target = now.replace(hour=UPDATE_HOUR, minute=UPDATE_MINUTE, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return target + timedelta(minutes=rng.randint(0, UPDATE_JITTER_MAX_MINUTES))
+
+
 def next_poll_interval(
     now: datetime,
     last_dateni: datetime | None,
     rng: random.Random | None = None,
+    fresh_pickup: bool = False,
 ) -> timedelta:
-    """Prochaine collecte : 06h30 (+ jitter 0-15 min), ou 2 h si donnée en retard.
+    """Prochaine collecte : 06h30 (+ jitter), ou 2 h pendant la fenêtre de rattrapage.
 
-    Le relevé partenaire tombe vers 01h00 ; si, passé 06h30, le dernier
-    relevé réel date d'avant-hier ou plus, on retente toutes les 2 h plutôt
-    que d'attendre le lendemain.
+    Le relevé de J-1 est publié en général vers 01h00, mais le partenaire le
+    livre parfois avec un jour de retard (J+2), en cours de matinée. Tant
+    qu'aucun point nouveau n'a été capturé aujourd'hui (fresh_pickup), que
+    le dernier relevé date d'avant J-1 et que la fenêtre matinale est
+    ouverte (06h30 → UPDATE_RETRY_CUTOFF_HOUR), on retente toutes les 2 h ;
+    sinon on recale la collecte au prochain créneau 06h30 — jamais de
+    polling la nuit ni l'après-midi, même si le partenaire accumule du
+    retard sur plusieurs jours.
     """
-    if last_dateni is not None:
-        yesterday = now.date() - timedelta(days=1)
-        if last_dateni.date() < yesterday:
-            return UPDATE_RETRY_DELAY
-
     rng = rng or random
-    target = now.replace(hour=UPDATE_HOUR, minute=UPDATE_MINUTE, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
-    target += timedelta(minutes=rng.randint(0, UPDATE_JITTER_MAX_MINUTES))
-    return target - now
+    up_to_date = (
+        last_dateni is not None
+        and last_dateni.date() >= now.date() - timedelta(days=UPDATE_LAG_DAYS)
+    )
+    in_catchup_window = UPDATE_HOUR <= now.hour < UPDATE_RETRY_CUTOFF_HOUR
+    if last_dateni is None or fresh_pickup or up_to_date or not in_catchup_window:
+        return _morning_target(now, rng) - now
+    return UPDATE_RETRY_DELAY
 
 
 def build_reading(
@@ -88,7 +102,7 @@ def build_reading(
 
 
 class EauDuPicCoordinator(DataUpdateCoordinator[dict[str, ContractReading]]):
-    """Collecte une fois par jour (après le relevé de ~01h00), pour tous les contrats."""
+    """Collecte quotidienne (06h30 + jitter, rattrapage 2 h le matin si besoin), tous contrats."""
 
     config_entry: EauDuPicConfigEntry
 
@@ -124,13 +138,29 @@ class EauDuPicCoordinator(DataUpdateCoordinator[dict[str, ContractReading]]):
         except EauDuPicApiClientAuthenticationError as err:
             raise ConfigEntryAuthFailed(err) from err
         except EauDuPicApiClientError as err:
+            # Intervalle court même en échec : sinon il reste celui du dernier
+            # succès (~24 h) et une erreur au poll du matin coûte une journée.
+            self.update_interval = UPDATE_RETRY_DELAY
             raise UpdateFailed(err) from err
 
         last_dateni: datetime | None = max(
             (reading.dateni for reading in readings.values() if reading.dateni is not None),
             default=None,
         )
-        self.update_interval = next_poll_interval(now, last_dateni)
+        # Un point plus récent qu'au poll précédent signifie que la
+        # publication du jour a été capturée : inutile de retenter aujourd'hui.
+        previous_dateni = max(
+            (
+                reading.dateni
+                for reading in (self.data or {}).values()
+                if reading.dateni is not None
+            ),
+            default=None,
+        )
+        fresh_pickup = last_dateni is not None and (
+            previous_dateni is None or last_dateni > previous_dateni
+        )
+        self.update_interval = next_poll_interval(now, last_dateni, fresh_pickup=fresh_pickup)
         if LOGGER.isEnabledFor(logging.DEBUG):
             for reading in readings.values():
                 LOGGER.debug(

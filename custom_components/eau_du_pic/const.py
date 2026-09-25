@@ -27,12 +27,17 @@ API_PATH_SIGNIN = "/api/v1/iclients/signin"
 API_PATH_CONTRAT = "/api/v1/iclients/contrat"
 API_PATH_TELEINDEX = "/api/v1/iclients/teleindex2"
 
-# Collecte : 1 relevé/jour côté partenaire (~01h00), disponible le matin.
-# On cible 06h30 avec un léger jitter, et on réessaie 2 h plus tard si le
-# relevé de la veille n'est pas encore arrivé.
+# Collecte : 1 relevé/jour côté partenaire, publié en général vers 01h00 mais
+# parfois avec un jour de retard (J+2), en cours de matinée. On cible 06h30
+# (+ jitter) ; tant qu'aucun point nouveau n'a été capturé aujourd'hui, on
+# retente toutes les 2 h pendant la fenêtre matinale (jusqu'à
+# UPDATE_RETRY_CUTOFF_HOUR), puis on attend le prochain créneau 06h30 —
+# jamais de polling la nuit ni l'après-midi.
 UPDATE_HOUR = 6
 UPDATE_MINUTE = 30
 UPDATE_JITTER_MAX_MINUTES = 15
+UPDATE_LAG_DAYS = 1            # attente nominale : le relevé de J-1 le matin
+UPDATE_RETRY_CUTOFF_HOUR = 14  # fin de la fenêtre de rattrapage matinale
 UPDATE_RETRY_DELAY = timedelta(hours=2)
 WINDOW_DAYS = 7
 

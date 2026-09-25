@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,11 +13,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eau_du_pic.api import (
     EauDuPicApiClientAuthenticationError,
+    EauDuPicApiClientCommunicationError,
     EauDuPicApiClientError,
 )
 from custom_components.eau_du_pic.const import (
     DOMAIN,
     UPDATE_HOUR,
+    UPDATE_JITTER_MAX_MINUTES,
     UPDATE_MINUTE,
     UPDATE_RETRY_DELAY,
 )
@@ -47,6 +49,16 @@ def make_coordinator(hass, client) -> EauDuPicCoordinator:
     entry = make_entry()
     entry.add_to_hass(hass)
     return EauDuPicCoordinator(hass, entry, client)
+
+
+def local_time(*args) -> datetime:
+    """Instant UTC à passer à freezer.move_to pour une heure locale donnée.
+
+    freezer.move_to interprète toute chaîne comme UTC ; construire l'instant
+    depuis DEFAULT_TIME_ZONE rend les tests indépendants du fuseau de la
+    machine (la fenêtre de rattrapage porte sur l'heure locale).
+    """
+    return datetime(*args, tzinfo=dt_util.DEFAULT_TIME_ZONE).astimezone(UTC)
 
 
 def test_window_dates_is_sliding_seven_days():
@@ -81,6 +93,44 @@ def test_next_poll_interval_retries_when_reading_missing():
     interval = next_poll_interval(now, datetime(2026, 9, 22, 1, 0, 0))
 
     assert interval == UPDATE_RETRY_DELAY
+
+
+def test_next_poll_interval_retries_j2_morning_while_waiting():
+    # Livraison J+2 : à 06h40 le point attendu (J-2, publié en cours de
+    # matinée) n'est pas encore là → retry 2 h.
+    now = datetime(2026, 9, 25, 6, 40)
+    interval = next_poll_interval(now, datetime(2026, 9, 23, 1, 0, 0))
+
+    assert interval == UPDATE_RETRY_DELAY
+
+
+def test_next_poll_interval_stops_for_the_day_once_new_point_fetched():
+    # Le point en retard J+2 vient d'être capturé : prochaine collecte
+    # demain 06h30 (+ jitter), pas de nouveau retry dans la journée.
+    now = datetime(2026, 9, 25, 10, 45)
+    interval = next_poll_interval(
+        now, datetime(2026, 9, 23, 1, 0, 0), fresh_pickup=True
+    )
+
+    assert timedelta(hours=19, minutes=45) <= interval <= timedelta(hours=20, minutes=0)
+
+
+def test_next_poll_interval_no_retry_after_morning_window():
+    # Passé 14 h les données du jour sont considérées tombées : on recale
+    # demain 06h30, même si le dernier relevé reste en retard de 2 jours.
+    now = datetime(2026, 9, 25, 14, 30)
+    interval = next_poll_interval(now, datetime(2026, 9, 23, 1, 0, 0))
+
+    assert timedelta(hours=16, minutes=0) <= interval <= timedelta(hours=16, minutes=15)
+
+
+def test_next_poll_interval_never_polls_at_night():
+    # 23h avec un retard J+2 : prochaine collecte demain 06h30, pas de
+    # retry nocturne (le partenaire ne publie qu'une fois par jour).
+    now = datetime(2026, 9, 25, 23, 0)
+    interval = next_poll_interval(now, datetime(2026, 9, 23, 1, 0, 0))
+
+    assert timedelta(hours=7, minutes=30) <= interval <= timedelta(hours=7, minutes=45)
 
 
 def test_next_poll_interval_deterministic_with_seeded_rng():
@@ -143,6 +193,72 @@ async def test_coordinator_sets_dynamic_interval_after_refresh(hass, mock_client
         target += timedelta(days=1)
     assert target - now <= coordinator.update_interval <= target - now + timedelta(minutes=15)
     assert coordinator.update_interval != UPDATE_RETRY_DELAY
+
+
+def stale_point() -> TeleindexPoint:
+    """Relevé daté du 23/09 01h00 : J-2 dans le contexte des tests ci-dessous."""
+    return TeleindexPoint(dateni=datetime(2026, 9, 23, 1, 0, 0), index_l=159874, conso_l=817)
+
+
+async def test_coordinator_keeps_retrying_while_no_new_point(hass, mock_client, freezer):
+    # Régime J+2 : le poll du matin (heure locale) ne rapporte rien de neuf
+    # (le point du 24/09 n'est pas encore publié le 25) → retries 2 h.
+    freezer.move_to(local_time(2026, 9, 24, 12, 0))
+    mock_client.async_get_teleindex = AsyncMock(return_value=([stale_point()], 2))
+    coordinator = make_coordinator(hass, mock_client)
+    await coordinator.async_refresh()
+
+    freezer.move_to(local_time(2026, 9, 25, 8, 40))
+    await coordinator.async_refresh()
+
+    assert coordinator.update_interval == UPDATE_RETRY_DELAY
+
+
+async def test_coordinator_schedules_next_morning_once_new_point_fetched(
+    hass, mock_client, freezer
+):
+    # Le point en retard arrive en cours de matinée : dès qu'il est capturé,
+    # la collecte se recale au créneau 06h30 du lendemain.
+    freezer.move_to(local_time(2026, 9, 24, 12, 0))
+    mock_client.async_get_teleindex = AsyncMock(return_value=([stale_point()], 2))
+    coordinator = make_coordinator(hass, mock_client)
+    await coordinator.async_refresh()
+
+    freezer.move_to(local_time(2026, 9, 25, 8, 40))
+    new_point = TeleindexPoint(
+        dateni=datetime(2026, 9, 24, 1, 0, 0), index_l=160000, conso_l=126
+    )
+    mock_client.async_get_teleindex = AsyncMock(return_value=([new_point], 2))
+    await coordinator.async_refresh()
+
+    now = dt_util.now()
+    target = now.replace(hour=UPDATE_HOUR, minute=UPDATE_MINUTE, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    assert (
+        target - now
+        <= coordinator.update_interval
+        <= target - now + timedelta(minutes=UPDATE_JITTER_MAX_MINUTES)
+    )
+    assert coordinator.update_interval != UPDATE_RETRY_DELAY
+
+
+async def test_coordinator_retries_after_api_error(hass, mock_client, freezer):
+    # Échec API après un succès : l'intervalle repasse à 2 h pour retenter
+    # le jour même au lieu d'attendre le créneau de demain.
+    freezer.move_to(local_time(2026, 9, 24, 12, 0))
+    mock_client.async_get_teleindex = AsyncMock(return_value=([stale_point()], 2))
+    coordinator = make_coordinator(hass, mock_client)
+    await coordinator.async_refresh()
+    assert coordinator.update_interval != UPDATE_RETRY_DELAY
+
+    mock_client.async_get_contrats = AsyncMock(
+        side_effect=EauDuPicApiClientCommunicationError("portail injoignable")
+    )
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.update_interval == UPDATE_RETRY_DELAY
 
 
 async def test_coordinator_maps_auth_error(hass, mock_client):
